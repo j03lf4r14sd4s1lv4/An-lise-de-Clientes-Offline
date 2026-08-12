@@ -1,0 +1,596 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Análise de Clientes Offline com Filtros</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+    <style>
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: #f4f7fc;
+            padding: 20px;
+            color: #1e293b;
+        }
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+            background: #fff;
+            border-radius: 16px;
+            box-shadow: 0 8px 30px rgba(0,0,0,0.1);
+            padding: 30px;
+        }
+        h1 { font-size: 28px; margin-bottom: 8px; display: flex; align-items: center; gap: 10px; }
+        h1 small { font-size: 16px; font-weight: normal; color: #64748b; }
+
+        .upload-area {
+            background: #f8fafc;
+            border: 2px dashed #cbd5e1;
+            border-radius: 12px;
+            padding: 30px 20px;
+            text-align: center;
+            margin: 20px 0 30px;
+            transition: 0.2s;
+        }
+        .upload-area:hover { border-color: #3b82f6; background: #f1f5f9; }
+        .upload-area input[type="file"] { display: none; }
+        .upload-area label {
+            cursor: pointer;
+            font-weight: 600;
+            color: #3b82f6;
+            padding: 10px 24px;
+            border-radius: 8px;
+            background: #e0f2fe;
+            transition: 0.2s;
+        }
+        .upload-area label:hover { background: #bae6fd; }
+        .file-name { margin-top: 10px; font-size: 14px; color: #475569; }
+        .btn-analyze {
+            background: #2563eb;
+            color: #fff;
+            border: none;
+            padding: 12px 40px;
+            border-radius: 8px;
+            font-size: 18px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: 0.2s;
+            margin-top: 10px;
+        }
+        .btn-analyze:hover { background: #1d4ed8; }
+        .btn-analyze:disabled { background: #94a3b8; cursor: not-allowed; }
+
+        .filters {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 12px 20px;
+            background: #f8fafc;
+            padding: 16px 20px;
+            border-radius: 10px;
+            margin: 20px 0 16px;
+            align-items: flex-end;
+        }
+        .filter-group {
+            display: flex;
+            flex-direction: column;
+            gap: 4px;
+            flex: 1 0 140px;
+        }
+        .filter-group label { font-size: 13px; font-weight: 600; color: #475569; }
+        .filter-group input, .filter-group select {
+            padding: 8px 12px;
+            border: 1px solid #d1d5db;
+            border-radius: 6px;
+            font-size: 14px;
+            background: #fff;
+            transition: 0.2s;
+        }
+        .filter-group input:focus, .filter-group select:focus {
+            border-color: #3b82f6;
+            outline: none;
+            box-shadow: 0 0 0 3px rgba(59,130,246,0.2);
+        }
+        .filter-group input[type="number"] { width: 90px; }
+        .filter-actions { display: flex; gap: 8px; align-self: flex-end; padding-bottom: 2px; }
+        .filter-actions button {
+            padding: 8px 16px;
+            border: none;
+            border-radius: 6px;
+            background: #e2e8f0;
+            cursor: pointer;
+            font-weight: 500;
+            transition: 0.2s;
+        }
+        .filter-actions button:hover { background: #cbd5e1; }
+        .filter-actions button.primary { background: #2563eb; color: #fff; }
+        .filter-actions button.primary:hover { background: #1d4ed8; }
+
+        .stats {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 20px;
+            margin: 20px 0 30px;
+        }
+        .stat-card {
+            background: #f1f5f9;
+            border-radius: 10px;
+            padding: 16px 24px;
+            flex: 1 1 140px;
+        }
+        .stat-card .label { font-size: 14px; color: #475569; }
+        .stat-card .value { font-size: 28px; font-weight: 700; color: #0f172a; }
+        .stat-card .value.danger { color: #dc2626; }
+        .stat-card .value.warning { color: #f59e0b; }
+        .stat-card .value.success { color: #16a34a; }
+
+        .table-wrapper { overflow-x: auto; margin-top: 12px; border-radius: 10px; border: 1px solid #e2e8f0; }
+        table { width: 100%; border-collapse: collapse; font-size: 14px; }
+        th {
+            background: #f1f5f9;
+            color: #0f172a;
+            font-weight: 600;
+            padding: 12px 10px;
+            white-space: nowrap;
+            text-align: left;
+            border-bottom: 2px solid #e2e8f0;
+        }
+        td { padding: 10px; border-bottom: 1px solid #e2e8f0; vertical-align: middle; }
+        tr:hover td { background: #f8fafc; }
+        .highlight { background: #fef9c3 !important; }
+        .badge {
+            display: inline-block;
+            padding: 2px 12px;
+            border-radius: 20px;
+            font-size: 12px;
+            font-weight: 600;
+        }
+        .badge-danger { background: #fee2e2; color: #b91c1c; }
+        .badge-warning { background: #fef3c7; color: #b45309; }
+        .badge-success { background: #dcfce7; color: #15803d; }
+        .badge-info { background: #dbeafe; color: #1d4ed8; }
+
+        .section-title {
+            font-size: 20px;
+            font-weight: 600;
+            margin-top: 30px;
+            margin-bottom: 12px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        .export-btn {
+            background: #0f172a;
+            color: #fff;
+            border: none;
+            padding: 6px 18px;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 14px;
+        }
+        .export-btn:hover { background: #1e293b; }
+        .no-data { text-align: center; padding: 40px 20px; color: #64748b; }
+        .footer { margin-top: 40px; text-align: center; font-size: 13px; color: #94a3b8; }
+        .alert-box {
+            background: #fef2f2;
+            border-left: 5px solid #dc2626;
+            padding: 14px 20px;
+            border-radius: 6px;
+            margin-bottom: 20px;
+        }
+        .alert-box strong { color: #b91c1c; }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <h1>📊 Análise de Clientes Offline <small>com filtros por tempo, status, transmissor, autenticação e motivo</small></h1>
+
+    <!-- Upload -->
+    <div class="upload-area">
+        <label for="file-input">📂 Selecione o arquivo .xlsx</label>
+        <input type="file" id="file-input" accept=".xlsx,.xls">
+        <div class="file-name" id="file-name">Nenhum arquivo selecionado</div>
+        <button class="btn-analyze" id="btn-analyze" disabled>🔍 Analisar</button>
+        <p style="margin-top: 12px; font-size: 14px; color: #64748b;">
+            O relatório é processado localmente, sem envio para servidores.
+        </p>
+    </div>
+
+    <!-- Painel de Filtros -->
+    <div id="filters-panel" style="display: none;">
+        <div class="filters">
+            <div class="filter-group">
+                <label>⏱ Tempo offline (dias) ≥</label>
+                <input type="number" id="filter-dias" value="0" min="0" step="1">
+            </div>
+            <div class="filter-group">
+                <label>📌 Status Acesso</label>
+                <select id="filter-status">
+                    <option value="">Todos</option>
+                    <option value="Ativo">Ativo</option>
+                    <option value="Bloqueio Automático">Bloqueio Automático</option>
+                    <option value="Bloqueio Manual">Bloqueio Manual</option>
+                    <option value="Aguardando Assinatura">Aguardando Assinatura</option>
+                    <option value="Desativado">Desativado</option>
+                </select>
+            </div>
+            <div class="filter-group">
+                <label>📡 Transmissor</label>
+                <select id="filter-transmissor"><option value="">Todos</option></select>
+            </div>
+            <div class="filter-group">
+                <label>🔐 Autenticação</label>
+                <select id="filter-auth">
+                    <option value="">Todos</option>
+                    <option value="IPoE">IPoE</option>
+                    <option value="PPPoE">PPPoE</option>
+                </select>
+            </div>
+            <div class="filter-group">
+                <label>⚠️ Motivo da desconexão</label>
+                <select id="filter-causa"><option value="">Todos</option></select>
+            </div>
+            <div class="filter-actions">
+                <button class="primary" id="apply-filters">Aplicar</button>
+                <button id="clear-filters">Limpar</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Estatísticas -->
+    <div id="stats-container" style="display: none;">
+        <div class="stats" id="stats"></div>
+    </div>
+
+    <!-- Alertas -->
+    <div id="alert-section" style="display: none;"></div>
+
+    <!-- Tabela -->
+    <div id="table-section" style="display: none;">
+        <div class="section-title">
+            <span>📋 Clientes Offline (ordenados por tempo offline)</span>
+            <button class="export-btn" id="export-csv">⬇ Exportar CSV (filtrado)</button>
+        </div>
+        <div class="table-wrapper">
+            <table id="result-table">
+                <thead></thead>
+                <tbody></tbody>
+            </table>
+        </div>
+    </div>
+
+    <div class="footer">
+        Data de referência: <span id="ref-date"></span> (atual)
+    </div>
+</div>
+
+<script>
+(function() {
+    // ================================================================
+    // 1. CONFIGURAÇÕES
+    // ================================================================
+    const COLUNAS = [
+        "ID", "Cliente", "Login", "On-line",
+        "Status contrato", "Status acesso",
+        "Transmissor", "Caixa de atendimento",
+        "Autenticação",
+        "Última conexão inicial", "Última conexão final",
+        "Quantidade de desconexões no dia de hoje",
+        "Causa da desconexão"
+    ];
+
+    const NOME_AMIGAVEL = {
+        "ID": "ID",
+        "Cliente": "Cliente",
+        "Login": "Login",
+        "On-line": "Online",
+        "Status contrato": "Status Contrato",
+        "Status acesso": "Status Acesso",
+        "Transmissor": "Transmissor",
+        "Caixa de atendimento": "Caixa",
+        "Autenticação": "Autenticação",
+        "Última conexão inicial": "Última Conexão Inicial",
+        "Última conexão final": "Última Conexão Final",
+        "Quantidade de desconexões no dia de hoje": "Desconexões (hoje)",
+        "Causa da desconexão": "Causa"
+    };
+
+    let dadosOffline = [];
+    let dadosFiltrados = [];
+    let dataReferencia = new Date();
+
+    // DOM
+    const fileInput = document.getElementById('file-input');
+    const fileName = document.getElementById('file-name');
+    const btnAnalyze = document.getElementById('btn-analyze');
+    const filtersPanel = document.getElementById('filters-panel');
+    const statsContainer = document.getElementById('stats-container');
+    const statsDiv = document.getElementById('stats');
+    const alertSection = document.getElementById('alert-section');
+    const tableSection = document.getElementById('table-section');
+    const tableHead = document.querySelector('#result-table thead');
+    const tableBody = document.querySelector('#result-table tbody');
+    const exportBtn = document.getElementById('export-csv');
+    const refDateSpan = document.getElementById('ref-date');
+
+    // Filtros
+    const filterDias = document.getElementById('filter-dias');
+    const filterStatus = document.getElementById('filter-status');
+    const filterTransmissor = document.getElementById('filter-transmissor');
+    const filterAuth = document.getElementById('filter-auth');
+    const filterCausa = document.getElementById('filter-causa');
+    const applyBtn = document.getElementById('apply-filters');
+    const clearBtn = document.getElementById('clear-filters');
+
+    // ================================================================
+    // 2. AUXILIARES
+    // ================================================================
+    function formatDate(date) {
+        if (!date || isNaN(date.getTime())) return '';
+        return date.toLocaleDateString('pt-BR') + ' ' + date.toLocaleTimeString('pt-BR', {hour:'2-digit', minute:'2-digit'});
+    }
+
+    function parseExcelDate(value) {
+        if (typeof value === 'number') {
+            const epoch = new Date(1899, 11, 30);
+            return new Date(epoch.getTime() + value * 86400000);
+        }
+        const d = new Date(value);
+        if (!isNaN(d)) return d;
+        return null;
+    }
+
+    function daysBetween(d1, d2) {
+        if (!d1 || !d2) return null;
+        const diff = d2.getTime() - d1.getTime();
+        return Math.floor(diff / (1000 * 60 * 60 * 24));
+    }
+
+    // ================================================================
+    // 3. LEITURA
+    // ================================================================
+    fileInput.addEventListener('change', function(e) {
+        const file = e.target.files[0];
+        if (!file) { fileName.textContent = 'Nenhum arquivo selecionado'; btnAnalyze.disabled = true; return; }
+        fileName.textContent = `📎 ${file.name} (${(file.size/1024).toFixed(1)} KB)`;
+        btnAnalyze.disabled = false;
+    });
+
+    btnAnalyze.addEventListener('click', function() {
+        const file = fileInput.files[0];
+        if (!file) return;
+        const reader = new FileReader();
+        reader.onload = function(e) {
+            try {
+                const data = new Uint8Array(e.target.result);
+                const workbook = XLSX.read(data, { type: 'array' });
+                const firstSheet = workbook.Sheets[workbook.SheetNames[0]];
+                const json = XLSX.utils.sheet_to_json(firstSheet, { defval: '' });
+                processData(json);
+            } catch (err) {
+                alert('Erro ao ler o arquivo: ' + err.message);
+                console.error(err);
+            }
+        };
+        reader.readAsArrayBuffer(file);
+    });
+
+    // ================================================================
+    // 4. PROCESSAMENTO
+    // ================================================================
+    function processData(json) {
+        if (!json || json.length === 0) { alert('Nenhum dado encontrado.'); return; }
+
+        const offline = json.filter(row => {
+            const online = (row['On-line'] || '').toString().trim().toUpperCase();
+            return online === 'NÃO' || online === 'NAO' || online === 'N';
+        });
+
+        dadosOffline = offline.map(row => {
+            const ultFinal = row['Última conexão final'];
+            let dtFinal = null;
+            if (ultFinal && ultFinal !== '') dtFinal = parseExcelDate(ultFinal);
+            let tempoDias = null;
+            if (dtFinal) tempoDias = daysBetween(dtFinal, dataReferencia);
+            let qtdDescon = parseInt(row['Quantidade de desconexões no dia de hoje']) || 0;
+            return { ...row, _dtFinal: dtFinal, _tempoDias: tempoDias, _qtdDescon: qtdDescon };
+        });
+
+        // Ordena por tempo offline (decrescente)
+        dadosOffline.sort((a, b) => {
+            if (a._tempoDias === null && b._tempoDias === null) return 0;
+            if (a._tempoDias === null) return 1;
+            if (b._tempoDias === null) return -1;
+            return b._tempoDias - a._tempoDias;
+        });
+
+        // Preenche opções dos filtros dinâmicos
+        const transmissores = [...new Set(dadosOffline.map(r => r['Transmissor'] || '').filter(Boolean))].sort();
+        filterTransmissor.innerHTML = '<option value="">Todos</option>' + transmissores.map(t => `<option value="${t}">${t}</option>`).join('');
+
+        const causas = [...new Set(dadosOffline.map(r => r['Causa da desconexão'] || '').filter(Boolean))].sort();
+        filterCausa.innerHTML = '<option value="">Todos</option>' + causas.map(c => `<option value="${c}">${c}</option>`).join('');
+
+        // Mostra painel
+        filtersPanel.style.display = 'block';
+        statsContainer.style.display = 'block';
+        tableSection.style.display = 'block';
+        refDateSpan.textContent = dataReferencia.toLocaleDateString('pt-BR');
+
+        aplicarFiltros();
+    }
+
+    // ================================================================
+    // 5. FILTROS
+    // ================================================================
+    function aplicarFiltros() {
+        const minDias = parseInt(filterDias.value) || 0;
+        const statusSel = filterStatus.value;
+        const transSel = filterTransmissor.value;
+        const authSel = filterAuth.value;
+        const causaSel = filterCausa.value;
+
+        dadosFiltrados = dadosOffline.filter(r => {
+            if (r._tempoDias !== null && r._tempoDias < minDias) return false;
+            if (r._tempoDias === null && minDias > 0) return false;
+            if (statusSel && r['Status acesso'] !== statusSel) return false;
+            if (transSel && r['Transmissor'] !== transSel) return false;
+            if (authSel && r['Autenticação'] !== authSel) return false;
+            if (causaSel && r['Causa da desconexão'] !== causaSel) return false;
+            return true;
+        });
+
+        renderStats();
+        renderAlerts();
+        renderTable();
+    }
+
+    // ================================================================
+    // 6. RENDERIZAÇÃO
+    // ================================================================
+    function renderStats() {
+        const total = dadosFiltrados.length;
+        const comData = dadosFiltrados.filter(r => r._tempoDias !== null).length;
+        const semData = total - comData;
+        let maxDias = 0;
+        dadosFiltrados.forEach(r => { if (r._tempoDias !== null && r._tempoDias > maxDias) maxDias = r._tempoDias; });
+        const totalDescon = dadosFiltrados.reduce((s, r) => s + r._qtdDescon, 0);
+
+        statsDiv.innerHTML = `
+            <div class="stat-card"><div class="label">Clientes Offline (filtrados)</div><div class="value danger">${total}</div></div>
+            <div class="stat-card"><div class="label">Com data final</div><div class="value warning">${comData}</div></div>
+            <div class="stat-card"><div class="label">Sem data</div><div class="value">${semData}</div></div>
+            <div class="stat-card"><div class="label">Maior tempo offline</div><div class="value">${maxDias > 0 ? maxDias + ' dias' : '-'}</div></div>
+            <div class="stat-card"><div class="label">Desconexões (hoje)</div><div class="value">${totalDescon}</div></div>
+        `;
+    }
+
+    function renderAlerts() {
+        const alerta = dadosFiltrados.filter(r => r._qtdDescon >= 5);
+        if (alerta.length === 0) { alertSection.style.display = 'none'; return; }
+        alertSection.style.display = 'block';
+        let html = `<div class="alert-box"><strong>⚠️ Atenção:</strong> ${alerta.length} clientes offline apresentam 5 ou mais desconexões hoje.</div>`;
+        html += `<div class="table-wrapper" style="margin-bottom:20px;">
+            <table style="background:#fff;">
+                <thead><tr><th>Cliente</th><th>Login</th><th>Desconexões (hoje)</th><th>Causa</th></tr></thead>
+                <tbody>`;
+        alerta.slice(0, 20).forEach(r => {
+            html += `<tr><td>${r['Cliente'] || ''}</td><td>${r['Login'] || ''}</td><td class="badge badge-danger">${r._qtdDescon}</td><td>${r['Causa da desconexão'] || ''}</td></tr>`;
+        });
+        html += `</tbody></table></div>`;
+        alertSection.innerHTML = html;
+    }
+
+    function renderTable() {
+        // Cabeçalho
+        let theadHtml = '<tr>';
+        COLUNAS.forEach(col => { theadHtml += `<th>${NOME_AMIGAVEL[col] || col}</th>`; });
+        theadHtml += '<th>Tempo offline (dias)</th></tr>';
+        tableHead.innerHTML = theadHtml;
+
+        // Corpo
+        const maxRows = 1000;
+        const rows = dadosFiltrados.slice(0, maxRows);
+        if (rows.length === 0) {
+            tableBody.innerHTML = `<tr><td colspan="${COLUNAS.length+1}" class="no-data">Nenhum cliente atende aos filtros.</td></tr>`;
+            return;
+        }
+
+        let tbodyHtml = '';
+        rows.forEach(row => {
+            const isHighlight = row._qtdDescon >= 5;
+            tbodyHtml += `<tr class="${isHighlight ? 'highlight' : ''}">`;
+            COLUNAS.forEach(col => {
+                let valor = row[col] || '';
+                if (col === 'Última conexão inicial' || col === 'Última conexão final') {
+                    const dt = parseExcelDate(valor);
+                    valor = dt ? formatDate(dt) : '';
+                }
+                if (col === 'Quantidade de desconexões no dia de hoje') {
+                    valor = row._qtdDescon;
+                    if (valor >= 5) valor = `<span class="badge badge-danger">${valor}</span>`;
+                    else if (valor > 0) valor = `<span class="badge badge-warning">${valor}</span>`;
+                    else valor = `<span class="badge badge-success">${valor}</span>`;
+                }
+                if (col === 'Status acesso') {
+                    if (valor.includes('Bloqueio')) valor = `<span class="badge badge-danger">${valor}</span>`;
+                    else if (valor === 'Ativo') valor = `<span class="badge badge-success">${valor}</span>`;
+                    else valor = `<span class="badge badge-info">${valor}</span>`;
+                }
+                if (col === 'Causa da desconexão' && valor) {
+                    // destaca causas comuns
+                    if (valor === 'Lost-Carrier') valor = `<span class="badge badge-danger">${valor}</span>`;
+                    else if (valor === 'User-Request') valor = `<span class="badge badge-warning">${valor}</span>`;
+                    else valor = `<span class="badge badge-info">${valor}</span>`;
+                }
+                tbodyHtml += `<td>${valor}</td>`;
+            });
+            const tempo = row._tempoDias !== null ? row._tempoDias : '—';
+            tbodyHtml += `<td>${tempo}</td>`;
+            tbodyHtml += '</tr>';
+        });
+
+        if (dadosFiltrados.length > maxRows) {
+            tbodyHtml += `<tr><td colspan="${COLUNAS.length+1}" style="text-align:center; color:#64748b;">... e mais ${dadosFiltrados.length - maxRows} registros (exporte CSV para ver todos)</td></tr>`;
+        }
+        tableBody.innerHTML = tbodyHtml;
+    }
+
+    // ================================================================
+    // 7. EVENTOS
+    // ================================================================
+    applyBtn.addEventListener('click', aplicarFiltros);
+    clearBtn.addEventListener('click', function() {
+        filterDias.value = 0;
+        filterStatus.value = '';
+        filterTransmissor.value = '';
+        filterAuth.value = '';
+        filterCausa.value = '';
+        aplicarFiltros();
+    });
+
+    // Aplicação automática ao mudar filtros
+    [filterDias, filterStatus, filterTransmissor, filterAuth, filterCausa].forEach(el => {
+        el.addEventListener('input', aplicarFiltros);
+        el.addEventListener('change', aplicarFiltros);
+    });
+
+    // ================================================================
+    // 8. EXPORTAR CSV
+    // ================================================================
+    exportBtn.addEventListener('click', function() {
+        if (dadosFiltrados.length === 0) { alert('Nenhum dado para exportar.'); return; }
+        const header = [...COLUNAS, 'Tempo offline (dias)'];
+        const rows = dadosFiltrados.map(row => {
+            const linha = COLUNAS.map(col => {
+                let val = row[col] || '';
+                if (col === 'Última conexão inicial' || col === 'Última conexão final') {
+                    const dt = parseExcelDate(val);
+                    if (dt) val = formatDate(dt);
+                }
+                return val;
+            });
+            linha.push(row._tempoDias !== null ? row._tempoDias : '');
+            return linha;
+        });
+        const csvContent = [header.join(';'), ...rows.map(r => r.join(';'))].join('\n');
+        const blob = new Blob(['\uFEFF' + csvContent], { type: 'text/csv;charset=utf-8;' });
+        const link = document.createElement('a');
+        link.href = URL.createObjectURL(blob);
+        link.download = 'clientes_offline_filtrados.csv';
+        link.click();
+        URL.revokeObjectURL(link.href);
+    });
+
+    // ================================================================
+    // 9. DATA REFERÊNCIA
+    // ================================================================
+    // Para fixar em 12/08/2026, descomente:
+    // dataReferencia = new Date(2026, 7, 12);
+    refDateSpan.textContent = dataReferencia.toLocaleDateString('pt-BR');
+
+})();
+</script>
+</body>
+</html>
